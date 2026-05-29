@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="description" content="写真内の顔や隠したい範囲を端末内でぼかすプライバシー保護アプリです。">
+<meta name="theme-color" content="#0c0c14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="FaceBlur">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<title>FaceBlur</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Space+Mono:wght@700&display=swap');
+:root {
+  --bg:#0c0c14; --sur:#161622; --sur2:#1f1f30;
+  --ac:#a8f0d0; --ac2:#5ecfaa;
+  --txt:#eeeef5; --mu:#666680;
+  --red:#ff6b9d; --warn:#ffd166;
+  --bdr:rgba(168,240,208,0.14); --r:14px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100%;background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;overscroll-behavior:none}
+button,input{font:inherit}
+button:focus-visible,.upload:focus-visible,.modal-close:focus-visible,.download-link:focus-visible{
+  outline:2px solid var(--ac);outline-offset:3px}
+
+/* header */
+.hdr{position:sticky;top:0;z-index:50;display:flex;align-items:center;gap:12px;
+  padding:14px 18px;background:rgba(12,12,20,.95);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--bdr)}
+.hdr-ic{width:36px;height:36px;background:linear-gradient(135deg,var(--ac),var(--ac2));
+  border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px}
+.hdr-t{font-family:'Space Mono',monospace;font-size:16px;color:var(--ac)}
+.hdr-s{font-size:10px;color:var(--mu);letter-spacing:1px;text-transform:uppercase}
+.hdr-spacer{flex:1}
+.hdr-link{color:var(--mu);font-size:12px;text-decoration:none;border:1px solid var(--bdr);
+  border-radius:100px;padding:6px 10px}
+.hdr-link:active{color:var(--ac);border-color:var(--ac)}
+
+.page{padding:14px 14px 80px;display:flex;flex-direction:column;gap:14px}
+
+/* upload */
+.upload{border:2px dashed var(--bdr);border-radius:var(--r);padding:40px 20px;
+  text-align:center;background:var(--sur);cursor:pointer;
+  -webkit-user-select:none;user-select:none}
+.upload.is-loading{opacity:.72;pointer-events:none}
+.upload:active{border-color:var(--ac2);background:var(--sur2)}
+.upload-ic{font-size:44px}
+.upload-t{font-size:17px;font-weight:600;margin:10px 0 4px}
+.upload-d{font-size:13px;color:var(--mu)}
+#fileInput{display:none}
+
+/* canvas section */
+.csec{display:none;flex-direction:column;gap:12px}
+.csec.on{display:flex}
+
+/* status */
+.srow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.spill{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mu)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mu);flex-shrink:0}
+.dot.spin{background:var(--ac);animation:blink 1s ease-in-out infinite}
+.dot.ok{background:var(--ac)} .dot.err{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.fbadge{display:inline-flex;align-items:center;gap:5px;
+  background:rgba(168,240,208,.1);border:1px solid var(--bdr);
+  border-radius:100px;padding:3px 12px;font-size:12px;
+  font-family:'Space Mono',monospace;color:var(--ac)}
+
+/* canvas box */
+.cbox{position:relative;border-radius:var(--r);overflow:hidden;
+  background:var(--sur);border:1px solid var(--bdr);
+  touch-action:none;cursor:crosshair}
+#cv{display:block;width:100%;height:auto;pointer-events:none}
+
+/* loading */
+.load{display:none;position:absolute;inset:0;background:rgba(12,12,20,.8);
+  backdrop-filter:blur(4px);align-items:center;justify-content:center;
+  flex-direction:column;gap:12px;border-radius:var(--r);z-index:5}
+.load.on{display:flex}
+.sring{width:36px;height:36px;border:3px solid var(--bdr);border-top-color:var(--ac);
+  border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ltxt{font-size:13px;color:var(--ac)}
+
+/* tap hint */
+.thint{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  background:rgba(12,12,20,.85);border:1px solid var(--bdr);
+  border-radius:100px;padding:7px 16px;font-size:12px;color:var(--ac);
+  pointer-events:none;white-space:nowrap}
+
+/* card */
+.card{background:var(--sur);border:1px solid var(--bdr);border-radius:var(--r);
+  padding:16px 14px;display:flex;flex-direction:column;gap:14px}
+.clbl{font-family:'Space Mono',monospace;font-size:10px;
+  letter-spacing:2px;text-transform:uppercase;color:var(--mu)}
+
+/* pills */
+.pills{display:flex;gap:7px;flex-wrap:wrap}
+.pill{padding:8px 13px;border-radius:100px;border:1px solid var(--bdr);
+  background:transparent;color:var(--mu);font-size:13px;
+  font-family:'DM Sans',sans-serif;font-weight:500;cursor:pointer;
+  transition:all .15s;min-height:40px}
+.pill.on{background:rgba(168,240,208,.15);border-color:var(--ac);color:var(--ac);font-weight:600}
+
+/* sliders */
+.srow2{display:flex;flex-direction:column;gap:8px}
+.slbl{display:flex;justify-content:space-between;font-size:13px;color:var(--mu)}
+.sval{font-family:'Space Mono',monospace;font-size:12px;color:var(--ac)}
+input[type=range]{-webkit-appearance:none;width:100%;height:6px;
+  background:var(--sur2);border-radius:4px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;
+  background:var(--ac);border-radius:50%;cursor:pointer}
+
+/* mode buttons */
+.mrow{display:flex;gap:8px}
+.mbtn{flex:1;padding:14px 8px;border-radius:12px;cursor:pointer;
+  font-size:14px;font-family:'DM Sans',sans-serif;font-weight:600;
+  text-align:center;transition:background .2s,border-color .2s,color .2s;
+  min-height:52px;border:2px solid var(--bdr);background:var(--sur2);color:var(--mu)}
+#mBlur.active{background:rgba(168,240,208,.22);border-color:var(--ac);color:var(--ac)}
+#mOff.active{background:rgba(255,107,157,.22);border-color:var(--red);color:var(--red)}
+.mbtn-all{width:100%;flex:none}
+.mbtn-all:active{background:rgba(168,240,208,.15);border-color:var(--ac2);color:var(--ac2)}
+
+/* action buttons */
+.acts{display:flex;gap:10px;flex-wrap:wrap}
+.btn{flex:1;min-width:90px;padding:15px 12px;border-radius:12px;border:none;
+  font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:opacity .15s,transform .1s;min-height:52px}
+.btn:active{opacity:.8;transform:scale(.97)}
+.btn-p{background:var(--ac);color:var(--bg)}
+.btn-s{background:var(--sur2);color:var(--txt);border:1px solid var(--bdr)}
+.btn-d{background:rgba(255,107,157,.13);color:var(--red);border:1px solid rgba(255,107,157,.25)}
+.btn-u{background:rgba(255,209,102,.13);color:var(--warn);border:1px solid rgba(255,209,102,.25)}
+
+.divl{height:1px;background:var(--bdr)}
+
+/* manual hint */
+.mhint{background:rgba(255,209,102,.07);border:1px solid rgba(255,209,102,.25);
+  border-radius:10px;padding:10px 14px;font-size:13px;color:var(--warn);display:none}
+.mhint.on{display:block}
+
+/* save modal */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);
+  z-index:200;align-items:center;justify-content:center;padding:20px}
+.modal-bg.on{display:flex}
+.modal{background:var(--sur);border:1px solid var(--bdr);border-radius:20px;
+  padding:24px 20px;width:100%;max-width:360px;display:flex;flex-direction:column;gap:16px}
+.modal-title{font-family:'Space Mono',monospace;font-size:14px;color:var(--ac);text-align:center}
+.modal-desc{font-size:13px;color:var(--mu);text-align:center;line-height:1.6}
+.modal-img{width:100%;border-radius:10px;border:1px solid var(--bdr)}
+.modal-btns{display:flex;gap:10px}
+.modal-close{flex:1;padding:13px;border-radius:10px;border:1px solid var(--bdr);
+  background:var(--sur2);color:var(--mu);font-size:14px;font-family:'DM Sans',sans-serif;cursor:pointer}
+.download-link{flex:1;display:flex;align-items:center;justify-content:center;padding:13px;
+  border-radius:10px;background:var(--ac);color:var(--bg);font-size:14px;font-weight:700;
+  text-decoration:none}
+
+/* toast */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);
+  background:var(--sur2);border:1px solid var(--ac);color:var(--ac);
+  padding:11px 22px;border-radius:100px;font-size:14px;font-weight:500;
+  opacity:0;transition:all .28s;pointer-events:none;z-index:999;white-space:nowrap}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-ic">🫥</div>
+  <div>
+    <div class="hdr-t">FaceBlur</div>
+    <div class="hdr-s">Tap to protect</div>
+  </div>
+  <div class="hdr-spacer"></div>
+  <a class="hdr-link" href="privacy.html">Privacy</a>
+</div>
+
+<div class="page">
+
+  <!-- Upload -->
+  <div class="upload" id="uploadZone" role="button" tabindex="0" aria-label="写真を選択">
+    <div class="upload-ic">📷</div>
+    <div class="upload-t">写真を選択</div>
+    <div class="upload-d">タップしてカメラロールから選ぶ</div>
+    <input type="file" id="fileInput" accept="image/*,.heic,.heif">
+  </div>
+
+  <!-- Canvas section -->
+  <div class="csec" id="cSection">
+
+    <div class="srow">
+      <div class="spill"><div class="dot" id="dot"></div><span id="stxt">待機中</span></div>
+      <div class="fbadge">👤 <span id="fcnt">0</span> 件</div>
+    </div>
+
+    <div class="cbox" id="cbox">
+      <canvas id="cv"></canvas>
+      <div class="load" id="loadEl">
+        <div class="sring"></div><div class="ltxt">顔を検出中...</div>
+      </div>
+      <div class="thint" id="thint">👆 顔をタップしてぼかす</div>
+    </div>
+
+    <div class="mhint" id="mhint">
+      ✏️ 自動検出できませんでした。ぼかしたい部分をタップ or ドラッグしてください。
+    </div>
+
+    <!-- ぼかし設定 -->
+    <div class="card">
+      <div class="clbl">ぼかしタイプ</div>
+      <div class="pills" id="blurPills">
+        <button class="pill on" data-t="gaussian">🌫 ガウシアン</button>
+        <button class="pill" data-t="mosaic">▦ モザイク</button>
+        <button class="pill" data-t="pixelate">◼ ピクセル</button>
+        <button class="pill" data-t="blackout">⬛ 黒塗り</button>
+      </div>
+      <div class="divl"></div>
+      <div class="clbl">形状</div>
+      <div class="pills" id="shapePills">
+        <button class="pill on" data-s="rect">▭ 四角</button>
+        <button class="pill" data-s="circle">● 丸</button>
+        <button class="pill" data-s="oval">⬭ 楕円</button>
+      </div>
+      <div class="divl"></div>
+      <div class="srow2">
+        <div class="slbl"><span>ぼかし強度</span><span class="sval" id="bv">20</span></div>
+        <input type="range" id="bsl" min="5" max="50" value="20">
+      </div>
+      <div class="srow2">
+        <div class="slbl"><span>範囲の余白</span><span class="sval" id="pv">6</span>px</div>
+        <input type="range" id="psl" min="0" max="60" value="6">
+      </div>
+    </div>
+
+    <!-- 操作モード -->
+    <div class="card">
+      <div class="clbl">操作モード — 現在：<span id="modeLabel" style="color:var(--ac);font-weight:700">ぼかし追加</span></div>
+      <div class="mrow">
+        <button class="mbtn active" id="mBlur" onclick="setMode('blur')">✅ ぼかし ON</button>
+        <button class="mbtn"        id="mOff"  onclick="setMode('remove')">↩️ ぼかし OFF</button>
+      </div>
+      <button class="mbtn mbtn-all" onclick="blurAll()">🫥 全部ぼかす</button>
+    </div>
+
+    <!-- アクション -->
+    <div class="acts">
+      <button class="btn btn-p" onclick="openSave()">⬇️ 保存</button>
+      <button class="btn btn-u" onclick="undoLast()">↩ 取り消し</button>
+      <button class="btn btn-s" onclick="reScan()">🔍 再スキャン</button>
+      <button class="btn btn-d" onclick="resetAll()">🗑 リセット</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- 保存モーダル（スマホ対応） -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-title" id="modalTitle">📸 写真を保存する</div>
+    <div class="modal-desc">
+      下の画像を<strong style="color:var(--ac)">長押し</strong>して<br>
+      「写真に追加」または「保存」を選んでね💕
+    </div>
+    <img id="modalImg" class="modal-img" src="" alt="保存用画像">
+    <div class="modal-btns">
+      <a id="downloadLink" class="download-link" href="#" download="faceblur.png">保存</a>
+      <button class="modal-close" onclick="closeModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(() => {});
+  });
+}
+
+/* =========================================================
+   STATE
+   ========================================================= */
+let origData  = null;
+let imgEl     = null;
+let faces     = [];        // {x,y,w,h,blurred,manual}
+let history   = [];        // undo用スナップショット
+let mode      = 'blur';
+let blurType  = 'gaussian';
+let blurShape = 'rect';
+let bStr      = 20;
+let padPx     = 6;
+let isDrag    = false;
+let dragStart = null;
+
+const cv  = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const box = document.getElementById('cbox');
+
+/* =========================================================
+   UPLOAD
+   ========================================================= */
+const uploadZone = document.getElementById('uploadZone');
+const fileInput  = document.getElementById('fileInput');
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    fileInput.click();
+  }
+});
+fileInput.addEventListener('change', e => { if(e.target.files[0]) loadFile(e.target.files[0]); });
+
+function loadFile(file) {
+  if (!file.type.startsWith('image/') && !/\.(heic|heif)$/i.test(file.name)) {
+    toast('画像ファイルを選んでください');
+    return;
+  }
+  uploadZone.classList.add('is-loading');
+  const reader = new FileReader();
+  reader.onload = ev => {
+    imgEl = new Image();
+    imgEl.onload = () => {
+      const maxW = Math.min(imgEl.width, 1400);
+      const sc   = maxW / imgEl.width;
+      cv.width   = Math.round(imgEl.width  * sc);
+      cv.height  = Math.round(imgEl.height * sc);
+      ctx.drawImage(imgEl, 0, 0, cv.width, cv.height);
+      origData = ctx.getImageData(0, 0, cv.width, cv.height);
+      faces = []; history = [];
+      uploadZone.style.display = 'none';
+      document.getElementById('cSection').classList.add('on');
+      document.getElementById('mhint').classList.remove('on');
+      uploadZone.classList.remove('is-loading');
+      reScan();
+    };
+    imgEl.onerror = () => {
+      uploadZone.classList.remove('is-loading');
+      toast('この画像は読み込めませんでした');
+    };
+    imgEl.src = ev.target.result;
+  };
+  reader.onerror = () => {
+    uploadZone.classList.remove('is-loading');
+    toast('ファイルを読み込めませんでした');
+  };
+  reader.readAsDataURL(file);
+}
+
+/* =========================================================
+   FACE DETECTION
+   ========================================================= */
+let trackingReady = false;
+
+function reScan() {
+  if (!imgEl) return;
+  showLoad(true);
+  setDot('spin', '顔を検出中...');
+  // ぼかし状態はリセットせず顔枠だけ再検出
+  faces = faces.filter(f => f.manual); // 手動追加分は残す
+  history = [];
+  fullRedraw();
+
+  // tracking.jsは一度ロードされていれば再利用、ただし再実行はOK
+  loadTrackingJS(() => {
+    try {
+      const tmp = document.createElement('canvas');
+      tmp.width = cv.width; tmp.height = cv.height;
+      tmp.getContext('2d').drawImage(imgEl, 0, 0, cv.width, cv.height);
+
+      const tracker = new tracking.ObjectTracker('face');
+      tracker.setInitialScale(4);
+      tracker.setStepSize(2);
+      tracker.setEdgesDensity(0.1);
+
+      let done = false;
+      tracker.on('track', ev => {
+        if (done) return; done = true;
+        showLoad(false);
+        if (ev.data.length > 0) {
+          // 自動検出分を追加（既存の手動分は保持）
+          const autoFaces = ev.data.map(f => ({x:f.x, y:f.y, w:f.width, h:f.height, blurred:false, manual:false}));
+          faces = [...autoFaces, ...faces.filter(f => f.manual)];
+          document.getElementById('fcnt').textContent = faces.length;
+          setDot('ok', `${ev.data.length}件を検出 — タップしてぼかす`);
+          document.getElementById('thint').textContent = '👆 顔の枠をタップ！';
+          document.getElementById('mhint').classList.remove('on');
+        } else {
+          setManualMode();
+        }
+        fullRedraw();
+      });
+      tracking.track(tmp, tracker);
+      setTimeout(() => { if (!done) { done=true; showLoad(false); setManualMode(); } }, 5000);
+    } catch(e) { showLoad(false); setManualMode(); }
+  });
+}
+
+function loadTrackingJS(cb) {
+  if (window.tracking && trackingReady) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/tracking.js/1.1.3/tracking-min.js';
+  s.onload = () => {
+    const s2 = document.createElement('script');
+    s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/tracking.js/1.1.3/data/face-min.js';
+    s2.onload  = () => { trackingReady=true; cb(); };
+    s2.onerror = () => { trackingReady=true; cb(); };
+    document.head.appendChild(s2);
+  };
+  s.onerror = () => { showLoad(false); setManualMode(); };
+  document.head.appendChild(s);
+}
+
+function setManualMode() {
+  setDot('err', '自動検出できませんでした — 手動タップ');
+  document.getElementById('thint').textContent = '✏️ ぼかしたい場所をタップ or ドラッグ';
+  document.getElementById('mhint').classList.add('on');
+  document.getElementById('fcnt').textContent = faces.length;
+}
+
+/* =========================================================
+   POINTER EVENTS
+   ========================================================= */
+box.addEventListener('pointerdown',  onDown,  {passive:false});
+box.addEventListener('pointermove',  onMove,  {passive:false});
+box.addEventListener('pointerup',    onUp,    {passive:false});
+box.addEventListener('pointercancel',()=>{ isDrag=false; dragStart=null; });
+
+function getXY(e) {
+  const rect = box.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (cv.width  / rect.width),
+    y: (e.clientY - rect.top)  * (cv.height / rect.height),
+  };
+}
+
+function onDown(e) {
+  e.preventDefault();
+  const pos = getXY(e);
+  const fi  = faceAt(pos);
+
+  if (fi !== -1) {
+    saveHistory();
+    if (mode === 'blur') {
+      faces[fi].blurred = true;
+      toast('✅ ぼかし ON！');
+    } else {
+      faces[fi].blurred = false;
+      toast('↩️ ぼかし OFF！');
+    }
+    fullRedraw();
+    return;
+  }
+
+  isDrag = true; dragStart = pos;
+}
+
+function onMove(e) {
+  e.preventDefault();
+  if (!isDrag || !dragStart) return;
+  const pos = getXY(e);
+  fullRedraw();
+  const x=Math.min(dragStart.x,pos.x), y=Math.min(dragStart.y,pos.y);
+  const w=Math.abs(pos.x-dragStart.x), h=Math.abs(pos.y-dragStart.y);
+  ctx.save();
+  ctx.strokeStyle='rgba(168,240,208,.9)';
+  ctx.lineWidth=2; ctx.setLineDash([5,4]);
+  ctx.strokeRect(x,y,w,h);
+  ctx.fillStyle='rgba(168,240,208,.06)';
+  ctx.fillRect(x,y,w,h);
+  ctx.restore();
+}
+
+function onUp(e) {
+  e.preventDefault();
+  if (!isDrag || !dragStart) return;
+  const pos = getXY(e);
+  const dx=Math.abs(pos.x-dragStart.x), dy=Math.abs(pos.y-dragStart.y);
+  saveHistory();
+
+  if (dx > 10 && dy > 10) {
+    faces.push({x:Math.min(dragStart.x,pos.x), y:Math.min(dragStart.y,pos.y),
+                w:dx, h:dy, blurred:true, manual:true});
+    toast('✅ 選択範囲をぼかした！');
+  } else {
+    const ts=Math.max(50, cv.width*0.12);
+    const x=Math.max(0,Math.min(cv.width-ts,pos.x-ts/2));
+    const y=Math.max(0,Math.min(cv.height-ts,pos.y-ts/2));
+    faces.push({x, y,
+                w:Math.min(cv.width-x,ts),
+                h:Math.min(cv.height-y,ts),
+                blurred:true, manual:true});
+    toast('✅ タップ位置をぼかした！');
+  }
+  document.getElementById('fcnt').textContent = faces.length;
+  fullRedraw();
+  isDrag=false; dragStart=null;
+}
+
+function faceAt(pos) {
+  const ex = padPx + 14;
+  for (let i=faces.length-1; i>=0; i--) {
+    const f=faces[i];
+    if (pos.x>=f.x-ex && pos.x<=f.x+f.w+ex &&
+        pos.y>=f.y-ex && pos.y<=f.y+f.h+ex) return i;
+  }
+  return -1;
+}
+
+/* =========================================================
+   HISTORY（undo）
+   ========================================================= */
+function saveHistory() {
+  history.push(JSON.parse(JSON.stringify(faces)));
+  if (history.length > 30) history.shift();
+}
+
+function undoLast() {
+  if (!origData) { toast('画像がありません'); return; }
+  if (history.length === 0) { toast('これ以上戻れません'); return; }
+  faces = history.pop();
+  document.getElementById('fcnt').textContent = faces.length;
+  fullRedraw();
+  toast('↩ 取り消しました');
+}
+
+/* =========================================================
+   DRAW
+   ========================================================= */
+function fullRedraw() {
+  if (!origData) return;
+  ctx.putImageData(origData, 0, 0);
+  faces.forEach(f => { if (f.blurred) applyBlur(f); });
+  faces.forEach((f,i) => {
+    if (f.blurred) return;
+    const x=f.x-padPx, y=f.y-padPx, w=f.w+padPx*2, h=f.h+padPx*2;
+    ctx.save();
+    ctx.strokeStyle='rgba(168,240,208,.75)';
+    ctx.lineWidth=2; ctx.setLineDash([6,4]);
+    shapeStroke(x,y,w,h);
+    ctx.restore();
+    const fs=Math.max(10,cv.width*0.018);
+    ctx.fillStyle='rgba(168,240,208,.85)';
+    ctx.font=`bold ${fs}px Space Mono,monospace`;
+    ctx.fillText(`FACE ${i+1}`, x+4, Math.max(y-4, fs+2));
+  });
+}
+
+function shapeStroke(x,y,w,h) {
+  ctx.beginPath();
+  if      (blurShape==='rect')   ctx.rect(x,y,w,h);
+  else if (blurShape==='circle') { const r=Math.min(w,h)/2; ctx.arc(x+w/2,y+h/2,r,0,Math.PI*2); }
+  else                            ctx.ellipse(x+w/2,y+h/2,w/2,h/2,0,0,Math.PI*2);
+  ctx.stroke();
+}
+
+/* =========================================================
+   BLUR ENGINE
+   ========================================================= */
+function applyBlur(f) {
+  const x=Math.max(0,Math.round(f.x-padPx));
+  const y=Math.max(0,Math.round(f.y-padPx));
+  const w=Math.min(cv.width-x,  Math.round(f.w+padPx*2));
+  const h=Math.min(cv.height-y, Math.round(f.h+padPx*2));
+  if (w<=0||h<=0) return;
+  if (blurShape==='rect') { blurRect(x,y,w,h); }
+  else                    { blurShaped(x,y,w,h); }
+}
+
+function blurRect(x,y,w,h) {
+  switch(blurType) {
+    case 'gaussian': { const d=ctx.getImageData(x,y,w,h); stackBlur(d.data,w,h,Math.round(bStr*.6)); ctx.putImageData(d,x,y); break; }
+    case 'mosaic':   { const d=ctx.getImageData(x,y,w,h); mosaicData(d.data,w,h);   ctx.putImageData(d,x,y); break; }
+    case 'pixelate': { const d=ctx.getImageData(x,y,w,h); pixelateData(d.data,w,h); ctx.putImageData(d,x,y); break; }
+    case 'blackout': ctx.fillStyle='#000'; ctx.fillRect(x,y,w,h); break;
+  }
+}
+
+function blurShaped(x,y,w,h) {
+  const tmp=document.createElement('canvas');
+  tmp.width=cv.width; tmp.height=cv.height;
+  const tc=tmp.getContext('2d');
+  tc.putImageData(origData,0,0);
+  if (blurType==='blackout') { tc.fillStyle='#000'; tc.fillRect(x,y,w,h); }
+  else {
+    const d=tc.getImageData(x,y,w,h);
+    if      (blurType==='gaussian') stackBlur(d.data,w,h,Math.round(bStr*.6));
+    else if (blurType==='mosaic')   mosaicData(d.data,w,h);
+    else if (blurType==='pixelate') pixelateData(d.data,w,h);
+    tc.putImageData(d,x,y);
+  }
+  ctx.save();
+  ctx.beginPath();
+  if (blurShape==='circle') { const r=Math.min(w,h)/2; ctx.arc(x+w/2,y+h/2,r,0,Math.PI*2); }
+  else ctx.ellipse(x+w/2,y+h/2,w/2,h/2,0,0,Math.PI*2);
+  ctx.clip();
+  ctx.drawImage(tmp,0,0);
+  ctx.restore();
+}
+
+function mosaicData(d,w,h) {
+  const sz=Math.max(4,Math.round(bStr*.9));
+  for (let by=0;by<h;by+=sz) for (let bx=0;bx<w;bx+=sz) {
+    let r=0,g=0,b=0,n=0;
+    for (let py=by;py<Math.min(by+sz,h);py++) for (let px=bx;px<Math.min(bx+sz,w);px++) {
+      const i=(py*w+px)*4; r+=d[i];g+=d[i+1];b+=d[i+2];n++;
+    }
+    r=r/n|0;g=g/n|0;b=b/n|0;
+    for (let py=by;py<Math.min(by+sz,h);py++) for (let px=bx;px<Math.min(bx+sz,w);px++) {
+      const i=(py*w+px)*4; d[i]=r;d[i+1]=g;d[i+2]=b;d[i+3]=255;
+    }
+  }
+}
+
+function pixelateData(d,w,h) {
+  const sz=Math.max(3,Math.round(bStr*.5));
+  for (let by=0;by<h;by+=sz) for (let bx=0;bx<w;bx+=sz) {
+    const i=(by*w+bx)*4, r=d[i],g=d[i+1],b=d[i+2];
+    for (let py=by;py<Math.min(by+sz,h);py++) for (let px=bx;px<Math.min(bx+sz,w);px++) {
+      const j=(py*w+px)*4; d[j]=r;d[j+1]=g;d[j+2]=b;d[j+3]=255;
+    }
+  }
+}
+
+function stackBlur(pix,W,H,rad) {
+  if (rad<1) return; rad=Math.min(rad,180);
+  const mt=[512,512,456,512,328,456,335,512,405,328,271,456,388,335,292,512,454,405,364,328,298,271,496,456,420,388,360,335,312,292,273,512,482,454,428,405,383,364,345,328,312,298,284,271,259,496,475,456,437,420,404,388,374,360,347,335,323,312,302,292,282,273,265,512,497,482,468,454,441,428,417,405,394,383,373,364,354,345,337,328,320,312,305,298,291,284,278,271,265,259,507,496,485,475,465,456,446,437,428,420,412,404,396,388,381,374,367,360,354,347,341,335,329,323,318,312,307,302,297,292,287,282,278,273,269,265,261,512,505,497,489,482,475,468,461,454,447,441,435,428,422,417,411,405,399,394,389,383,378,373,368,364,359,354,350,345,341,337,332,328,324,320,316,312,309,305,301,298,294,291,287,284,281,278,274,271,268,265,262,259,257,507,501,496,491,485,480,475,470,465,460,456,451,446,442,437,433,428,424,420,416,412,408,404,400,396,392,388,385,381,377,374,370,367,363,360,357,354,350,347,344,341,338,335,332,329,326,323,320,318,315,312,310,307,304,302,299,297,294,292,289,287,285,282,280,278,275,273,271,269,267,265,263,261,259];
+  const st=[9,10,10,11,11,12,12,13,13,13,13,14,14,14,14,15,15,15,15,15,15,15,16,16,16,16,16,16,16,16,16,17,17,17,17,17,17,17,17,17,17,17,17,17,17,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,19,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,20,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,21,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22,22];
+  const ms=mt[rad]||256, ss=st[rad]||9, div=2*rad+1, wm=W-1, hm=H-1;
+  const r=[],g=[],b=[], stk=[]; for(let i=0;i<div;i++) stk[i]=[0,0,0];
+  let rsum,gsum,bsum,x,y,i,p,yi,yw=0,sp,sir;
+  yi=0;
+  for(y=0;y<H;y++){
+    rsum=gsum=bsum=0;
+    for(i=-rad;i<=rad;i++){
+      p=(yi+Math.min(wm,Math.max(0,i)))*4; sir=stk[i+rad];
+      sir[0]=pix[p];sir[1]=pix[p+1];sir[2]=pix[p+2];
+      const rb=rad+1-Math.abs(i); rsum+=sir[0]*rb;gsum+=sir[1]*rb;bsum+=sir[2]*rb;
+    }
+    sp=rad;
+    for(x=0;x<W;x++){
+      r[yi]=rsum*ms>>ss;g[yi]=gsum*ms>>ss;b[yi]=bsum*ms>>ss;
+      const ss2=(sp-rad+div)%div;
+      rsum-=stk[ss2][0];gsum-=stk[ss2][1];bsum-=stk[ss2][2];
+      sir=stk[(sp+rad+1)%div];
+      sir[0]=pix[p=(yi+Math.min(x+rad+1,wm))*4];sir[1]=pix[p+1];sir[2]=pix[p+2];
+      rsum+=sir[0];gsum+=sir[1];bsum+=sir[2]; sp=(sp+1)%div; yi++;
+    }
+    yw+=W;
+  }
+  for(x=0;x<W;x++){
+    rsum=gsum=bsum=0; let yp=-rad*W;
+    for(i=-rad;i<=rad;i++){
+      yi=Math.max(0,yp)+x; sir=stk[i+rad];
+      sir[0]=r[yi];sir[1]=g[yi];sir[2]=b[yi];
+      const rb=rad+1-Math.abs(i); rsum+=sir[0]*rb;gsum+=sir[1]*rb;bsum+=sir[2]*rb;
+      if(i<hm)yp+=W;
+    }
+    yi=x; sp=rad;
+    for(y=0;y<H;y++){
+      pix[yi*4]=rsum*ms>>ss;pix[yi*4+1]=gsum*ms>>ss;pix[yi*4+2]=bsum*ms>>ss;
+      const ss2=(sp-rad+div)%div;
+      rsum-=stk[ss2][0];gsum-=stk[ss2][1];bsum-=stk[ss2][2];
+      sir=stk[(sp+1+rad)%div];
+      sir[0]=r[yi=x+Math.min(y+rad+1,hm)*W];sir[1]=g[yi];sir[2]=b[yi];
+      rsum+=sir[0];gsum+=sir[1];bsum+=sir[2]; sp=(sp+1)%div; yi+=W;
+    }
+  }
+}
+
+/* =========================================================
+   BLUR ALL
+   ========================================================= */
+function blurAll() {
+  if (faces.length===0) { toast('顔が検出されていません'); return; }
+  saveHistory();
+  faces.forEach(f => f.blurred=true);
+  fullRedraw();
+  toast('🫥 全部ぼかした！');
+}
+
+/* =========================================================
+   SAVE（スマホ対応：モーダルで長押し保存）
+   ========================================================= */
+function openSave() {
+  if (!origData) { toast('保存する画像がありません'); return; }
+  // オフスクリーンcanvasで枠なし画像を生成（メインcanvasを汚さない）
+  const off = document.createElement('canvas');
+  off.width  = cv.width;
+  off.height = cv.height;
+  const octx = off.getContext('2d');
+  octx.putImageData(origData, 0, 0);
+  // ぼかしをオフスクリーンに適用
+  faces.forEach(f => {
+    if (!f.blurred) return;
+    const x = Math.max(0, Math.round(f.x - padPx));
+    const y = Math.max(0, Math.round(f.y - padPx));
+    const w = Math.min(off.width  - x, Math.round(f.w + padPx * 2));
+    const h = Math.min(off.height - y, Math.round(f.h + padPx * 2));
+    if (w <= 0 || h <= 0) return;
+    if (blurShape === 'rect') {
+      applyBlurToCtx(octx, origData, f, x, y, w, h);
+    } else {
+      applyBlurShapedToCtx(octx, origData, off, f, x, y, w, h);
+    }
+  });
+  const dataUrl = off.toDataURL('image/png');
+  document.getElementById('modalImg').src = dataUrl;
+  document.getElementById('downloadLink').href = dataUrl;
+  document.getElementById('modalBg').classList.add('on');
+}
+
+// オフスクリーンctx用ぼかし（四角）
+function applyBlurToCtx(octx, oData, f, x, y, w, h) {
+  // origDataからコピーしてぼかし処理
+  const tmp = document.createElement('canvas');
+  tmp.width = cv.width; tmp.height = cv.height;
+  const tc = tmp.getContext('2d');
+  tc.putImageData(oData, 0, 0);
+  switch(blurType) {
+    case 'gaussian': { const d=tc.getImageData(x,y,w,h); stackBlur(d.data,w,h,Math.round(bStr*.6)); tc.putImageData(d,x,y); break; }
+    case 'mosaic':   { const d=tc.getImageData(x,y,w,h); mosaicData(d.data,w,h);   tc.putImageData(d,x,y); break; }
+    case 'pixelate': { const d=tc.getImageData(x,y,w,h); pixelateData(d.data,w,h); tc.putImageData(d,x,y); break; }
+    case 'blackout': tc.fillStyle='#000'; tc.fillRect(x,y,w,h); break;
+  }
+  octx.drawImage(tmp, x, y, w, h, x, y, w, h);
+}
+
+// オフスクリーンctx用ぼかし（丸・楕円）
+function applyBlurShapedToCtx(octx, oData, off, f, x, y, w, h) {
+  const tmp = document.createElement('canvas');
+  tmp.width = cv.width; tmp.height = cv.height;
+  const tc = tmp.getContext('2d');
+  tc.putImageData(oData, 0, 0);
+  if (blurType === 'blackout') { tc.fillStyle='#000'; tc.fillRect(x,y,w,h); }
+  else {
+    const d = tc.getImageData(x,y,w,h);
+    if      (blurType==='gaussian') stackBlur(d.data,w,h,Math.round(bStr*.6));
+    else if (blurType==='mosaic')   mosaicData(d.data,w,h);
+    else if (blurType==='pixelate') pixelateData(d.data,w,h);
+    tc.putImageData(d,x,y);
+  }
+  octx.save();
+  octx.beginPath();
+  if (blurShape==='circle') { const r=Math.min(w,h)/2; octx.arc(x+w/2,y+h/2,r,0,Math.PI*2); }
+  else octx.ellipse(x+w/2,y+h/2,w/2,h/2,0,0,Math.PI*2);
+  octx.clip();
+  octx.drawImage(tmp,0,0);
+  octx.restore();
+}
+function closeModal() {
+  document.getElementById('modalBg').classList.remove('on');
+}
+document.getElementById('modalBg').addEventListener('click', e => {
+  if (e.target.id === 'modalBg') closeModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+});
+
+/* =========================================================
+   RESET
+   ========================================================= */
+function resetAll() {
+  uploadZone.style.display='';
+  uploadZone.classList.remove('is-loading');
+  document.getElementById('cSection').classList.remove('on');
+  faces=[]; history=[]; origData=null; imgEl=null;
+  fileInput.value=''; trackingReady=false;
+  document.getElementById('fcnt').textContent='0';
+  document.getElementById('mhint').classList.remove('on');
+  document.getElementById('modalImg').src='';
+  document.getElementById('downloadLink').href='#';
+  toast('🗑 リセット完了');
+}
+
+/* =========================================================
+   MODE
+   ========================================================= */
+function setMode(m) {
+  mode = m;
+  const lbl = document.getElementById('modeLabel');
+  document.getElementById('mBlur').classList.toggle('active', m==='blur');
+  document.getElementById('mOff').classList.toggle('active', m==='remove');
+  if (m==='blur') {
+    lbl.textContent='ぼかし追加';
+    lbl.style.color='var(--ac)';
+  } else {
+    lbl.textContent='ぼかし解除';
+    lbl.style.color='var(--red)';
+  }
+  toast(m==='blur' ? '✅ ぼかし追加モード' : '↩️ ぼかし解除モード');
+}
+
+/* =========================================================
+   CONTROLS
+   ========================================================= */
+document.getElementById('blurPills').addEventListener('click', e => {
+  const p=e.target.closest('.pill'); if(!p) return;
+  document.querySelectorAll('#blurPills .pill').forEach(x=>x.classList.remove('on'));
+  p.classList.add('on'); blurType=p.dataset.t;
+  if (faces.some(f=>f.blurred)) fullRedraw();
+});
+document.getElementById('shapePills').addEventListener('click', e => {
+  const p=e.target.closest('.pill'); if(!p) return;
+  document.querySelectorAll('#shapePills .pill').forEach(x=>x.classList.remove('on'));
+  p.classList.add('on'); blurShape=p.dataset.s;
+  if (faces.some(f=>f.blurred)) fullRedraw();
+});
+document.getElementById('bsl').addEventListener('input', e => {
+  bStr=+e.target.value; document.getElementById('bv').textContent=bStr;
+  if (faces.some(f=>f.blurred)) fullRedraw();
+});
+document.getElementById('psl').addEventListener('input', e => {
+  padPx=+e.target.value; document.getElementById('pv').textContent=padPx;
+  fullRedraw();
+});
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+function showLoad(v) { document.getElementById('loadEl').classList.toggle('on',v); }
+function setDot(cls,txt) {
+  document.getElementById('dot').className='dot '+cls;
+  document.getElementById('stxt').textContent=txt;
+}
+let toastT;
+function toast(msg) {
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('on');
+  clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('on'),2400);
+}
+</script>
+</body>
+</html>

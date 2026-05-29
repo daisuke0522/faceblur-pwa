@@ -1,0 +1,14 @@
+{
+  "name": "faceblur-pwa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "FaceBlur PWA for Vercel",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check:pwa": "node scripts/check-pwa.mjs",
+    "preview": "python3 -m http.server 4173 --directory dist"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
