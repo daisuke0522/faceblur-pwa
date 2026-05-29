@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "mkdir -p dist/assets && cp index.html face-blur-app.html manifest.json service-worker.js privacy.html dist/ && cp apple-touch-icon.png icon-192.png icon-512.png dist/assets/",
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "headers": [
